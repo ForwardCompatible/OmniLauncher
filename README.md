@@ -2,7 +2,7 @@
 
 A Tauri v2 desktop application that provides a clean simple GUI that locally exposes an OpenAI-compatible API gateway with hosted, CUDA-accelerated `llama-server` models. Drop in `.gguf` files, configure VRAM allocation, and point any OpenAI-compatible client at a single reverse-proxy port.
 
-!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_1.png)
+![First open](https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_1.png)
 
 
 ## Features
