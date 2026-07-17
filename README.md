@@ -1,11 +1,11 @@
 # OmniLauncher
 
-A Tauri v2 desktop application that provides a clean, OpenAI-compatible API gateway for CUDA-accelerated `llama-server` models. Drop in `.gguf` files, configure VRAM allocation, and point any OpenAI-compatible client at a single reverse-proxy port.
+A Tauri v2 desktop application that provides a clean simple GUI that locally exposes an OpenAI-compatible API gateway with hosted, CUDA-accelerated `llama-server` models. Drop in `.gguf` files, configure VRAM allocation, and point any OpenAI-compatible client at a single reverse-proxy port.
 
 ## Features
 
 - **Hybrid VRAM Management** — Dynamic layer offloading via llama.cpp's `--fit` engine. Automatically splits model layers between GPU VRAM and system RAM based on your hardware.
-- **Dual-Model Support** — Run a chat model (`/v1/chat/completions`) and an embedding model (`/v1/embeddings`) simultaneously behind a single reverse proxy.
+- **Dual-Model Support** — Run either a chat model (`/v1/chat/completions`) an embedding model (`/v1/embeddings`), or both simultaneously behind a single reverse proxy. (**hardware limited feature)
 - **42 Configurable Flags** — Temperature, top-k/p, repeat penalty, mirostat, DRY sampling, RoPE scaling, and more. All default to "auto" — only set what you need.
 - **Hardware Auto-Detection** — Scans NVIDIA VRAM, system RAM, and CPU cores on first launch. CPU-only fallback if no GPU is detected.
 - **Pure JavaScript Frontend** — Svelte 5 with runes. No TypeScript, no bloat.
@@ -54,7 +54,7 @@ models/
 ├── my-chat-model.gguf          # Chat models (auto-detected from GGUF header)
 ├── my-embedding-model.gguf     # Embedding models (auto-detected from pooling_type)
 └── multimodal/
-    └── my-vision-projector.gguf # Vision projectors (excluded from chat scan)
+    └── my-vision-projector.gguf # Vision projectors (**Future feature)
 ```
 
 The app discovers models automatically on startup. No manual registration needed.
