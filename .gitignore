@@ -7,6 +7,7 @@ src-tauri/target/
 src-tauri/gen/
 
 # Editor / OS
+.zcode/
 .vscode/
 .idea/
 .DS_Store
