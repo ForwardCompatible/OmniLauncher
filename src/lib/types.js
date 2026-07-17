@@ -22,6 +22,17 @@
  */
 
 /**
+ * Live telemetry sample from the hardware monitor. Pushed to the frontend via
+ * the `hardware-stats` event every 2 seconds; also fetchable on demand.
+ * @typedef {Object} HardwareStats
+ * @property {number} cpu_usage_percent Aggregate CPU utilization, 0.0–100.0
+ * @property {number} ram_used_mb Used system RAM in MiB
+ * @property {number} ram_total_mb Total system RAM in MiB
+ * @property {?number} vram_used_mb Used VRAM in MiB; null when CPU-only
+ * @property {?number} vram_total_mb Total VRAM in MiB; null when CPU-only
+ */
+
+/**
  * @typedef {Object} ModelDto
  * @property {number} id
  * @property {string} filename

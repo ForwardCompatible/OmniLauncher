@@ -7,6 +7,7 @@ import * as cmd from "./commands.js";
 export const page = $state({ current: "loader" });
 export const models = $state({ list: [] });
 export const hardware = $state({ data: null });
+export const hardwareStats = $state({ data: /** @type {import('./types.js').HardwareStats | null} */ (null) });
 export const proxy = $state({ data: null });
 export const processes = $state({ list: [] });
 export const settings = $state({ data: null });
@@ -70,6 +71,14 @@ export async function refreshHardware() {
   }
 }
 
+export async function refreshHardwareStats() {
+  try {
+    hardwareStats.data = await cmd.getHardwareStats();
+  } catch (e) {
+    pushError(String(e), "warning");
+  }
+}
+
 export async function refreshSettings() {
   try {
     settings.data = await cmd.getAppSettings();
@@ -92,6 +101,7 @@ export async function initAll() {
   await Promise.all([
     refreshModels(),
     refreshHardware(),
+    refreshHardwareStats(),
     refreshProxy(),
     refreshProcesses(),
     refreshSettings(),

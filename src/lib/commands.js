@@ -41,6 +41,11 @@ export async function rescanHardware() {
   return invoke("rescan_hardware");
 }
 
+/** @returns {Promise<import('./types.js').HardwareStats>} */
+export async function getHardwareStats() {
+  return invoke("get_hardware_stats");
+}
+
 // ── Registry ──
 
 /** @returns {Promise<import('./types.js').ModelDto[]>} */

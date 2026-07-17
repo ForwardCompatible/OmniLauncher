@@ -6,6 +6,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::db::{load_hardware_profile, DbPools, HardwareProfileRow};
+use crate::monitor::{HardwareMonitor, HardwareStats};
 
 /// The shape the frontend receives. Mirrors the DB row plus the derived
 /// `gpu_present` boolean the launch logic will branch on.
@@ -70,4 +71,14 @@ pub async fn rescan_hardware(
         .map_err(|e| e.to_string())?;
 
     Ok(dto)
+}
+
+/// Read the most recent live telemetry sample from the hardware monitor. Cheap
+/// (one read lock, no sampling work); used by the frontend for an initial fetch
+/// before the first `hardware-stats` event arrives.
+#[tauri::command]
+pub async fn get_hardware_stats(
+    monitor: State<'_, Arc<HardwareMonitor>>,
+) -> Result<HardwareStats, String> {
+    Ok(monitor.latest().await)
 }

@@ -14,6 +14,7 @@ pub mod db;
 mod gguf;
 pub mod hardware;
 mod logging;
+pub mod monitor;
 mod paths;
 pub mod process;
 pub mod proxy;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use crate::db::DbPools;
+use crate::monitor::HardwareMonitor;
 use crate::sidecar::SidecarController;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,6 +41,7 @@ pub fn run() {
             commands::flags::get_flag_dictionary,
             commands::hardware::get_hardware_profile,
             commands::hardware::rescan_hardware,
+            commands::hardware::get_hardware_stats,
             commands::registry::get_models,
             commands::registry::resync_registry,
             commands::proxy::get_proxy_status,
@@ -114,7 +117,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         log::info!("Hardware profile persisted to System.db");
     }
 
-    // 4. Sync the model registry: scan `models/`, parse each `.gguf`, upsert
+    // 4. Start the live hardware monitor — samples CPU/RAM/VRAM every 2s and
+    //    emits `hardware-stats` events to the frontend footer. Constructed
+    //    once; the sampler loop owns its Nvml + System handles for the app
+    //    lifetime. Mirrors the proxy.rs spawn pattern.
+    let monitor = Arc::new(HardwareMonitor::new());
+    let monitor_for_task = monitor.clone();
+    let app_handle_for_monitor = app.handle().clone();
+    monitor_for_task.run(app_handle_for_monitor);
+    app.manage(monitor);
+
+    // 5. Sync the model registry: scan `models/`, parse each `.gguf`, upsert
     //    into models_metadata, drop stale rows. Per AGENTS.md "Startup: Registry
     //    syncs with OmniLauncher/models".
     let models_dir = data_dir.join("models");
@@ -137,7 +150,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     );
 
-    // 5. Start the reverse proxy. Read the master port + auto-increment flag
+    // 6. Start the reverse proxy. Read the master port + auto-increment flag
     //    from app_settings, build the shared routing state (both backends
     //    start None — Layer 5 fills them in), spawn the axum server, and
     //    register the state so commands (and Layer 5) can write routing.
@@ -154,11 +167,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
     app.manage(proxy_state);
 
-    // 6. Sidecar controller — manages all llama-server child processes via a
+    // 7. Sidecar controller — manages all llama-server child processes via a
     //    clean start/stop/status interface. Hides tokio::process internals.
     app.manage(Arc::new(SidecarController::default()));
 
-    // 7. Hand the pools to Tauri's managed state so commands can use them.
+    // 8. Hand the pools to Tauri's managed state so commands can use them.
     app.manage(pools);
 
     Ok(())

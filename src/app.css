@@ -140,6 +140,28 @@ body {
   color: var(--text-muted);
 }
 
+.footer .version {
+  margin-right: auto; /* pushes live stats and the GPU badge to the right */
+}
+
+.footer .stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  /* tabular-nums keeps the digits a fixed width so the footer doesn't jitter
+     as the values update every 2 seconds. */
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.footer .stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 /* ════════════ NavRail ════════════ */
 
 .navrail {

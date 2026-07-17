@@ -18,12 +18,18 @@
     refreshProxy,
     refreshHardware,
     hardware,
+    hardwareStats,
   } from "./lib/stores.svelte.js";
 
   let railCollapsed = $state(false);
 
   function toggleRail() {
     railCollapsed = !railCollapsed;
+  }
+
+  /** Format a MiB value as a one-decimal GB string, e.g. 6553 → "6.4 GB". */
+  function fmtGB(mb) {
+    return (mb / 1024).toFixed(1) + " GB";
   }
 
   let runningCount = $derived(processes.list.length);
@@ -38,6 +44,9 @@
     });
     await listen("hardware-updated", () => {
       refreshHardware();
+    });
+    await listen("hardware-stats", (e) => {
+      hardwareStats.data = e.payload;
     });
     await listen("registry-updated", () => {
       refreshModels();
@@ -89,7 +98,23 @@
   </main>
 
   <footer class="footer">
-    <span>OmniLauncher 0.1.0</span>
+    <span class="version">OmniLauncher 0.1.0</span>
+    {#if hardwareStats.data}
+      <span class="stat" title="CPU utilization">
+        <span class="stat-label">CPU</span>
+        {hardwareStats.data.cpu_usage_percent.toFixed(0)}%
+      </span>
+      <span class="stat" title="System memory">
+        <span class="stat-label">RAM</span>
+        {fmtGB(hardwareStats.data.ram_used_mb)} / {fmtGB(hardwareStats.data.ram_total_mb)}
+      </span>
+      {#if hardwareStats.data.vram_total_mb !== null}
+        <span class="stat" title="GPU video memory">
+          <span class="stat-label">VRAM</span>
+          {fmtGB(hardwareStats.data.vram_used_mb)} / {fmtGB(hardwareStats.data.vram_total_mb)}
+        </span>
+      {/if}
+    {/if}
     {#if hardware.data}
       <span class="badge muted">
         {hardware.data.gpu_present ? "GPU mode" : "CPU-only"}
