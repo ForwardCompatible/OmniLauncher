@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Local environment
+.env
+.env.local
+
+# Tauri dev artifacts
+src-tauri/WixTools/
+
+# Model weights — large, user-supplied. Directory scaffolding tracked via .gitkeep.
+models/*.gguf
+models/**/*.gguf
+models/*.bin
+models/**/*.bin
+
+# llama-server binary + shared libraries — large (~187MB), downloaded via setup script.
+# Directory structure preserved via .gitkeep files.
+src-tauri/resources/llama-server/*
+!src-tauri/resources/llama-server/.gitkeep
+
+# App-data binaries (Windows download target) — created at runtime.
+src-tauri/binaries/

@@ -1,0 +1,77 @@
+[package]
+name = "omnilauncher"
+version = "0.1.0"
+description = "OmniLauncher — a Tauri-based launcher for CUDA llama-server"
+authors = ["OmniLauncher"]
+edition = "2021"
+rust-version = "1.95"
+
+# Library target (Tauri v2 convention: lib.rs holds run(), main.rs is thin).
+[lib]
+name = "omnilauncher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6", features = [] }
+
+[dependencies]
+# Tauri core
+tauri = { version = "2.11", features = [] }
+tauri-plugin-log = "2.8"
+
+# Logging facade (tauri-plugin-log is built on this)
+log = "0.4"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# SQLite (WAL mode, pooled via deadpool).
+# NOTE: rusqlite must match deadpool-sqlite's requirement exactly (0.38 for
+# deadpool-sqlite 0.13) so both resolve to a single libsqlite3-sys copy.
+# The "bundled" feature compiles SQLite from source, guaranteeing a modern
+# version regardless of the host system library.
+rusqlite = { version = "0.38", features = ["bundled"] }
+deadpool-sqlite = "0.13"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Paths (app-data dir resolution)
+dirs = "6.0"
+
+# Hardware detection
+# - nvml-wrapper: NVIDIA GPU name + VRAM (dynamically loads libnvidia-ml.so.1
+#   from the driver; fails cleanly to None on CPU-only hosts).
+# - sysinfo: total system RAM + CPU physical/logical core counts.
+nvml-wrapper = "0.12"
+sysinfo = "0.39"
+
+# Async runtime (used by deadpool + the axum proxy)
+tokio = { version = "1.52", features = ["full"] }
+
+# Reverse proxy (Layer 4). axum 0.8 sits on hyper 1.x; reqwest is the
+# forwarder. `default-features = false` on reqwest avoids pulling rustls/
+# native-tls — the proxy only ever talks to http://127.0.0.1 backends.
+# `stream` is required for response.bytes_stream() → SSE pass-through.
+axum = "0.8"
+reqwest = { version = "0.13", default-features = false, features = ["http2", "stream", "json"] }
+
+# libc: used by the sidecar controller for kill() syscalls (Linux only).
+libc = "0.2"
+
+# windows-sys: used by the sidecar controller for TerminateProcess (Windows only).
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Threading", "Win32_Foundation"] }
+
+[dev-dependencies]
+async-stream = "0.3"
+serde_json = "1.0"
+libc = "0.2"
+
+[features]
+# This feature is required by cargo-tauri to enable release-mode optimizations
+# on deps even on debug builds (much faster llama-server spawning etc.).
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
