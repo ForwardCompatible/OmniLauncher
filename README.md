@@ -48,7 +48,7 @@ cargo tauri dev
 ```bash
 sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libnccl2
 ```
-!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_2.png)
+![model selected and model cards expanded](https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_2.png)
 
 ## Adding Models
 
@@ -121,8 +121,8 @@ cd src-tauri && cargo test
 ```
 
 ## Additional Images
-!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_3.png)
-!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_info.png)
+![remaining available model settings](https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_3.png)
+![example of hover tooltip](https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_info.png)
 
 ## License
 
