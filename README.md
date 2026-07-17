@@ -2,11 +2,15 @@
 
 A Tauri v2 desktop application that provides a clean simple GUI that locally exposes an OpenAI-compatible API gateway with hosted, CUDA-accelerated `llama-server` models. Drop in `.gguf` files, configure VRAM allocation, and point any OpenAI-compatible client at a single reverse-proxy port.
 
+!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_1.png)
+
+
 ## Features
 
 - **Hybrid VRAM Management** — Dynamic layer offloading via llama.cpp's `--fit` engine. Automatically splits model layers between GPU VRAM and system RAM based on your hardware.
 - **Dual-Model Support** — Run either a chat model (`/v1/chat/completions`) an embedding model (`/v1/embeddings`), or both simultaneously behind a single reverse proxy. (**hardware limited feature)
 - **42 Configurable Flags** — Temperature, top-k/p, repeat penalty, mirostat, DRY sampling, RoPE scaling, and more. All default to "auto" — only set what you need.
+- **Helpful Tooltips** — Each setting has a hover-tip to explain what it does, in terms you can understand (NO excessive techno-babble!)
 - **Hardware Auto-Detection** — Scans NVIDIA VRAM, system RAM, and CPU cores on first launch. CPU-only fallback if no GPU is detected.
 - **Pure JavaScript Frontend** — Svelte 5 with runes. No TypeScript, no bloat.
 
@@ -15,7 +19,7 @@ A Tauri v2 desktop application that provides a clean simple GUI that locally exp
 ### Linux
 
 ```bash
-git clone https://github.com/your-org/OmniLauncher.git
+git clone https://github.com/ForwardCompatible/OmniLauncher.git
 cd OmniLauncher
 ./setup.sh
 cargo tauri dev
@@ -24,7 +28,7 @@ cargo tauri dev
 ### Windows (PowerShell)
 
 ```powershell
-git clone https://github.com/your-org/OmniLauncher.git
+git clone https://github.com/ForwardCompatible/OmniLauncher.git
 cd OmniLauncher
 .\setup.ps1
 cargo tauri dev
@@ -44,6 +48,7 @@ cargo tauri dev
 ```bash
 sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libnccl2
 ```
+!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_2.png)
 
 ## Adding Models
 
@@ -114,6 +119,10 @@ cargo tauri build
 # Run tests
 cd src-tauri && cargo test
 ```
+
+## Additional Images
+!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_3.png)
+!(https://github.com/ForwardCompatible/OmniLauncher/blob/main/OmniLauncher_info.png)
 
 ## License
 
