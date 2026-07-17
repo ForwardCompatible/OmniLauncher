@@ -126,4 +126,5 @@ cd src-tauri && cargo test
 
 ## License
 
-[Specify your license here]
+PolyForm Noncommercial License 1.0.0
+https://github.com/polyformproject/polyform-licenses/blob/1.0.0/PolyForm-Noncommercial-1.0.0.md
