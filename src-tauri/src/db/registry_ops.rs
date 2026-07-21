@@ -174,9 +174,15 @@ pub async fn list_models(pool: &Pool) -> Result<Vec<ModelSummary>> {
 
 /// Full registry reconciliation: upsert every parsed record, delete rows whose
 /// files are no longer on disk.
+///
+/// `all_filenames_on_disk` must include EVERY `.gguf` file found on disk —
+/// both parsed AND skipped (unchanged) ones. Skipped files have no record to
+/// upsert, but their DB row must be preserved. Without this set, the reconcile
+/// logic would treat skipped files as "vanished" and delete their rows.
 pub async fn reconcile_models(
     pool: &Pool,
     records: &[ModelRecord],
+    all_filenames_on_disk: &std::collections::HashSet<String>,
 ) -> Result<ReconcileReport> {
     // Snapshot existing filenames so we can detect removals.
     let before: Vec<String> = {
@@ -198,10 +204,9 @@ pub async fn reconcile_models(
         before.iter().map(|s| s.as_str()).collect();
 
     let mut report = ReconcileReport::default();
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // Upsert only the newly-parsed records (skipped files are left untouched).
     for rec in records {
-        seen.insert(rec.filename.clone());
         match upsert_model(pool, rec).await {
             Ok(_) => {
                 if before_set.contains(rec.filename.as_str()) {
@@ -218,8 +223,10 @@ pub async fn reconcile_models(
     }
 
     // Remove rows whose files vanished from disk.
+    // Uses all_filenames_on_disk (which includes skipped files) so unchanged
+    // models are NOT deleted.
     for old_filename in &before {
-        if !seen.contains(old_filename.as_str()) {
+        if !all_filenames_on_disk.contains(old_filename.as_str()) {
             if let Err(e) = delete_model_by_filename(pool, old_filename).await {
                 log::warn!("Failed to delete stale row {}: {e:#}", old_filename);
                 report.failed += 1;
@@ -230,6 +237,31 @@ pub async fn reconcile_models(
     }
 
     Ok(report)
+}
+
+/// Fetch a map of filename → filesize_bytes for all models in the registry.
+/// Used by `scan_with_report` to skip parsing unchanged files (same name +
+/// same size = same GGUF header = no need to re-read multi-GB files).
+pub async fn list_known_file_sizes(pool: &Pool) -> Result<std::collections::HashMap<String, i64>> {
+    let conn = pool
+        .get()
+        .await
+        .context("DB connection for known-file-sizes")?;
+    conn.interact(|c| {
+        let mut stmt = c.prepare("SELECT filename, filesize_bytes FROM models_metadata")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        let mut out = std::collections::HashMap::new();
+        for r in rows {
+            let (filename, size) = r?;
+            out.insert(filename, size);
+        }
+        Ok::<_, rusqlite::Error>(out)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Panic reading known file sizes: {e}"))?
+    .context("Failed to read known file sizes")
 }
 
 /// Set the role tag on a model ('chat', 'embedding', or NULL to clear).
@@ -529,4 +561,25 @@ pub async fn model_has_settings(pool: &Pool, model_id: i64) -> Result<bool> {
         .await
         .map_err(|e| anyhow::anyhow!("Panic during model_has_settings: {e}"))?;
     Ok(exists)
+}
+
+/// Batch query: fetch the set of model IDs that have saved settings. Replaces
+/// the N+1 pattern of calling `model_has_settings` per model in a loop.
+pub async fn models_with_settings(pool: &Pool) -> Result<std::collections::HashSet<i64>> {
+    let conn = pool
+        .get()
+        .await
+        .context("DB connection for models_with_settings")?;
+    conn.interact(|c| {
+        let mut stmt = c.prepare("SELECT model_id FROM model_settings")?;
+        let rows = stmt.query_map([], |r| r.get::<_, i64>(0))?;
+        let mut out = std::collections::HashSet::new();
+        for r in rows {
+            out.insert(r?);
+        }
+        Ok::<_, rusqlite::Error>(out)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Panic during models_with_settings: {e}"))?
+    .context("Failed to read model_settings IDs")
 }

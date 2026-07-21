@@ -17,6 +17,36 @@ export const flags = $state({ map: new Map() });
 // All backend failures route here so the user is never left guessing.
 export const errors = $state({ items: [] });
 
+// HuggingFace auth + search + downloads state.
+export const hfAuth = $state({ data: /** @type {import('./types.js').HfAuthStatus|null} */ (null) });
+export const hfSearch = $state({
+  results: /** @type {import('./types.js').HfModelResult[]} */ ([]),
+  nextCursor: /** @type {string|null} */ (null),
+  loading: false,
+});
+export const hfDownloads = $state({
+  /** @type {Record<string, { id: number, downloaded: number, total: number|null, status: "active"|"completed"|"failed", message?: string }>} */
+  map: {},
+});
+
+export async function refreshHfAuth() {
+  try {
+    hfAuth.data = await cmd.hfAuthStatus();
+  } catch (e) {
+    pushError(String(e), "warning");
+  }
+}
+
+/** Update one entry in the downloads map (keyed by `repoId/filename`). */
+export function setHfDownload(key, entry) {
+  hfDownloads.map[key] = entry;
+}
+
+/** Remove a finished/failed download entry. */
+export function clearHfDownload(key) {
+  delete hfDownloads.map[key];
+}
+
 /**
  * Push an error into the visible UI queue.
  * @param {string} message

@@ -37,6 +37,11 @@ use tokio::sync::RwLock;
 /// Caps the scan so a pathological situation can't spin 65k bind attempts.
 const MAX_PORT_INCREMENTS: u16 = 50;
 
+/// Maximum request body size to buffer (64 MiB). Chat-completion prompts are
+/// bounded but can be large (long conversations with base64 images). This is
+/// the cap for `axum::body::to_bytes`.
+const MAX_REQUEST_BODY_BYTES: usize = 64 * 1024 * 1024;
+
 /// Hop-by-hop headers that must NOT be copied from the upstream response —
 /// reqwest sets its own framing and duplicating these confuses clients.
 /// RFC 7230 §6.1 minus Keep-Alive (which reqwest also handles).
@@ -223,7 +228,7 @@ async fn forward(client: &reqwest::Client, req: Request, port: Option<u16>) -> R
     // bounded and small relative to model data; buffering them avoids pulling
     // in async_stream/futures_core just for this conversion. The *response*
     // is still streamed (see upstream_to_response) so SSE works.
-    let body_bytes = match axum::body::to_bytes(body, 64 * 1024 * 1024).await {
+    let body_bytes = match axum::body::to_bytes(body, MAX_REQUEST_BODY_BYTES).await {
         Ok(b) => b,
         Err(e) => {
             return json_response(

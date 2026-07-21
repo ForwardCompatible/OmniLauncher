@@ -1,6 +1,5 @@
 <script>
-  import ChatModelCard from "../components/ChatModelCard.svelte";
-  import EmbeddingModelCard from "../components/EmbeddingModelCard.svelte";
+  import ModelCard from "../components/ModelCard.svelte";
 </script>
 
 <div class="loader-page">
@@ -12,7 +11,7 @@
   </p>
 
   <div class="cards-grid">
-    <ChatModelCard />
-    <EmbeddingModelCard />
+    <ModelCard role="chat" />
+    <ModelCard role="embedding" />
   </div>
 </div>

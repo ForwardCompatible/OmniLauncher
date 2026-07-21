@@ -38,21 +38,44 @@ pub struct ScanReport {
 
 /// Build a ScanReport from a directory scan + a list of parse failures.
 /// Convenience for the command layer.
-pub fn scan_with_report(models_dir: &Path) -> Result<(Vec<ModelRecord>, ScanReport)> {
+///
+/// `known_files` maps filename → filesize_bytes for models already in the DB.
+/// When a file's stat'd size matches the known value, `gguf::parse` is skipped
+/// (the header can't have changed if the file hasn't). This avoids multi-GB
+/// reads for unchanged models at startup.
+///
+/// Returns `(records, all_filenames, report)` where `all_filenames` includes
+/// BOTH parsed and skipped files. The caller passes this to `reconcile_models`
+/// so skipped files are correctly treated as "still present" (not deleted).
+pub fn scan_with_report(
+    models_dir: &Path,
+    known_files: &std::collections::HashMap<String, i64>,
+) -> Result<(Vec<ModelRecord>, std::collections::HashSet<String>, ScanReport)> {
     if !models_dir.is_dir() {
-        return Ok((Vec::new(), ScanReport::default()));
+        return Ok((Vec::new(), Default::default(), ScanReport::default()));
     }
 
     let multimodal_dir = models_dir.join("multimodal");
     let mut records = Vec::new();
+    let mut all_filenames = std::collections::HashSet::new();
     let mut failed = Vec::new();
 
     for entry in walk_gguf_files(models_dir) {
         if entry.starts_with(&multimodal_dir) {
             continue;
         }
-        match parse_one(&entry) {
-            Ok(rec) => records.push(rec),
+        match parse_one_or_skip(&entry, known_files) {
+            Ok(Some(rec)) => {
+                all_filenames.insert(rec.filename.clone());
+                records.push(rec);
+            }
+            Ok(None) => {
+                // Skipped (unchanged) — but we still need to record the filename
+                // so reconcile_models knows it's still on disk.
+                if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
+                    all_filenames.insert(name.to_string());
+                }
+            }
             Err(e) => {
                 log::warn!("Failed to parse {}: {e:#}", entry.display());
                 failed.push(entry.display().to_string());
@@ -64,12 +87,18 @@ pub fn scan_with_report(models_dir: &Path) -> Result<(Vec<ModelRecord>, ScanRepo
         found: records.len(),
         failed,
     };
-    Ok((records, report))
+    Ok((records, all_filenames, report))
 }
 
-/// Parse a single `.gguf` file into a `ModelRecord`.
-fn parse_one(path: &Path) -> Result<ModelRecord> {
-    let metadata = gguf::parse(path)?;
+/// Parse a `.gguf` file, OR skip parsing if the file is known-unchanged
+/// (filename + filesize match an existing DB row). Returns `Ok(None)` when
+/// skipped — the caller simply doesn't include it in the records list, and
+/// `reconcile_models` will leave the existing DB row untouched (it's still
+/// in the `before_set` and still in `seen`).
+fn parse_one_or_skip(
+    path: &Path,
+    known_files: &std::collections::HashMap<String, i64>,
+) -> Result<Option<ModelRecord>> {
     let filesize_bytes = std::fs::metadata(path)
         .with_context(|| format!("stat failed for {}", path.display()))?
         .len() as i64;
@@ -79,12 +108,22 @@ fn parse_one(path: &Path) -> Result<ModelRecord> {
         .map(|s| s.to_string())
         .ok_or_else(|| anyhow::anyhow!("invalid filename (non-UTF8): {}", path.display()))?;
 
-    Ok(ModelRecord {
+    // Skip parsing if the file hasn't changed since the last scan.
+    // Same filename + same byte count = same GGUF header = no need to re-read.
+    if let Some(&known_size) = known_files.get(&filename) {
+        if known_size == filesize_bytes {
+            log::debug!("Skipping unchanged model: {filename}");
+            return Ok(None);
+        }
+    }
+
+    let metadata = gguf::parse(path)?;
+    Ok(Some(ModelRecord {
         filename,
         filepath: path.to_path_buf(),
         filesize_bytes,
         metadata,
-    })
+    }))
 }
 
 /// Recursively collect all `*.gguf` file paths under `root`, sorted for
@@ -140,7 +179,7 @@ mod tests {
     fn scan_missing_dir_is_empty_not_error() {
         let tmp = tempdir();
         let nonexistent = tmp.join("does-not-exist");
-        let (result, _) = scan_with_report(&nonexistent).expect("should not error");
+        let (result, _, _) = scan_with_report(&nonexistent, &Default::default()).expect("should not error");
         assert!(result.is_empty());
     }
 
@@ -150,7 +189,7 @@ mod tests {
         let tmp = tempdir();
         let models = tmp.join("models");
         fs::create_dir_all(&models).unwrap();
-        let (result, _) = scan_with_report(&models).unwrap();
+        let (result, _, _) = scan_with_report(&models, &Default::default()).unwrap();
         assert!(result.is_empty());
     }
 
@@ -162,7 +201,7 @@ mod tests {
         fs::create_dir_all(&models).unwrap();
         fs::write(models.join("README.txt"), b"hello").unwrap();
         fs::write(models.join("model.part"), b"partial").unwrap();
-        let (result, _) = scan_with_report(&models).unwrap();
+        let (result, _, _) = scan_with_report(&models, &Default::default()).unwrap();
         assert!(result.is_empty(), "non-gguf files should be ignored");
     }
 
@@ -175,7 +214,7 @@ mod tests {
         fs::create_dir_all(&models).unwrap();
         fs::write(models.join("broken.gguf"), b"this is not a real gguf file").unwrap();
 
-        let (records, report) = scan_with_report(&models).unwrap();
+        let (records, _, report) = scan_with_report(&models, &Default::default()).unwrap();
         assert!(records.is_empty(), "no valid records");
         assert_eq!(report.failed.len(), 1);
         assert!(report.failed[0].ends_with("broken.gguf"));
@@ -193,7 +232,7 @@ mod tests {
         // And a corrupt one in models/ root to ensure the walk still visits it.
         fs::write(models.join("root.gguf"), b"not real").unwrap();
 
-        let (_records, report) = scan_with_report(&models).unwrap();
+        let (_records, _, report) = scan_with_report(&models, &Default::default()).unwrap();
         // The corrupt root.gguf is recorded as a failure; the multimodal one is
         // not even attempted (skipped), so it doesn't appear in failed.
         assert_eq!(report.failed.len(), 1);
@@ -216,7 +255,7 @@ mod tests {
         fs::write(&real_file, b"not a real gguf but has the extension").unwrap();
         symlink(&real_file, models.join("linked.gguf")).unwrap();
 
-        let (_records, report) = scan_with_report(&models).unwrap();
+        let (_records, _, report) = scan_with_report(&models, &Default::default()).unwrap();
         // The symlink was followed: the target was parsed and failed (it's not
         // a real GGUF), so it shows up in `failed` — proving the link was
         // traversed rather than silently skipped.
@@ -235,7 +274,7 @@ mod tests {
         fs::create_dir_all(&models).unwrap();
         symlink("/nonexistent/target.gguf", models.join("dangling.gguf")).unwrap();
 
-        let (records, report) = scan_with_report(&models).unwrap();
+        let (records, _, report) = scan_with_report(&models, &Default::default()).unwrap();
         // No records, no parse failures — the dangling link was just skipped.
         assert!(records.is_empty());
         assert!(report.failed.is_empty(),

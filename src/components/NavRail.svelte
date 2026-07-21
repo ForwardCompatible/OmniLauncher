@@ -24,6 +24,21 @@
 
   <button
     class="nav-item"
+    class:active={currentPage === "models"}
+    onclick={() => navigate("models")}
+    title="Models"
+  >
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+    </svg>
+    {#if !collapsed}<span class="nav-label">Models</span>{/if}
+  </button>
+
+  <button
+    class="nav-item"
     class:active={currentPage === "settings"}
     onclick={() => navigate("settings")}
     title="Settings"

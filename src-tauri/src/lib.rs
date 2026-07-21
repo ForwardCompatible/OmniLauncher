@@ -11,8 +11,11 @@
 
 mod commands;
 pub mod db;
+pub mod download_manager;
 mod gguf;
 pub mod hardware;
+pub mod hf_auth;
+pub mod huggingface;
 mod logging;
 pub mod monitor;
 mod paths;
@@ -26,6 +29,8 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use crate::db::DbPools;
+use crate::download_manager::DownloadManager;
+use crate::huggingface::HfClient;
 use crate::monitor::HardwareMonitor;
 use crate::sidecar::SidecarController;
 
@@ -33,9 +38,9 @@ use crate::sidecar::SidecarController;
 pub fn run() {
     tauri::Builder::default()
         .plugin(logging::build_plugin().build())
+        .plugin(tauri_plugin_opener::init())
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
-            commands::ping,
             commands::app_settings::get_app_settings,
             commands::app_settings::save_app_settings_cmd,
             commands::flags::get_flag_dictionary,
@@ -45,13 +50,22 @@ pub fn run() {
             commands::registry::get_models,
             commands::registry::resync_registry,
             commands::proxy::get_proxy_status,
-            commands::proxy::set_routing,
-            commands::models::set_model_role,
             commands::models::get_model_settings,
             commands::models::save_model_settings,
             commands::process::launch_model,
             commands::process::stop_model,
             commands::process::get_process_status,
+            commands::huggingface::hf_auth_start,
+            commands::huggingface::hf_auth_poll,
+            commands::huggingface::hf_auth_cancel,
+            commands::huggingface::hf_auth_status,
+            commands::huggingface::hf_auth_logout,
+            commands::huggingface::hf_search,
+            commands::huggingface::hf_list_files,
+            commands::huggingface::hf_file_size,
+            commands::huggingface::hf_readme,
+            commands::huggingface::hf_download,
+            commands::huggingface::hf_cancel_download,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OmniLauncher")
@@ -128,13 +142,18 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(monitor);
 
     // 5. Sync the model registry: scan `models/`, parse each `.gguf`, upsert
-    //    into models_metadata, drop stale rows. Per AGENTS.md "Startup: Registry
-    //    syncs with OmniLauncher/models".
+    //    into models_metadata, drop stale rows. Files already in the DB with
+    //    matching filesize are skipped (avoids multi-GB reads for unchanged
+    //    models at startup).
     let models_dir = data_dir.join("models");
-    let (records, scan_report) = registry::scan_with_report(&models_dir)?;
+    let known_files = tauri::async_runtime::block_on(
+        db::registry_ops::list_known_file_sizes(&pools.registry),
+    )?;
+    let (records, all_filenames, scan_report) = registry::scan_with_report(&models_dir, &known_files)?;
     let reconcile = tauri::async_runtime::block_on(db::registry_ops::reconcile_models(
         &pools.registry,
         &records,
+        &all_filenames,
     ))?;
     log::info!(
         "Registry sync: {} added, {} updated, {} removed, {} DB failure(s), {} unparseable file(s){}",
@@ -171,7 +190,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     //    clean start/stop/status interface. Hides tokio::process internals.
     app.manage(Arc::new(SidecarController::default()));
 
-    // 8. Hand the pools to Tauri's managed state so commands can use them.
+    // 8. HuggingFace browser — client (with keychain OAuth token, if any) and
+    //    the download manager (tracks in-flight downloads for cancellation).
+    app.manage(Arc::new(HfClient::new()));
+    app.manage(Arc::new(DownloadManager::new()));
+
+    // 9. Hand the pools to Tauri's managed state so commands can use them.
     app.manage(pools);
 
     Ok(())

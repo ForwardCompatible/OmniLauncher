@@ -8,8 +8,8 @@
 //! ## OS Awareness
 //!
 //! The binary path resolver and command builder are gated behind
-//! `#[cfg(target_os = "...")]`. Only Linux is implemented in the MVP;
-//! Windows and macOS will `compile_error!` if targeted.
+//! `#[cfg(target_os = "...")]`. Both Linux and Windows are supported;
+//! macOS is not currently targeted.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,6 +18,12 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context, Result};
 use tauri::Manager;
 use tokio::process::Child;
+
+/// Seconds to wait for llama-server to report a listening port before giving up.
+const STARTUP_TIMEOUT_SECS: u64 = 120;
+
+/// Seconds between SIGTERM and SIGKILL during graceful shutdown (Linux only).
+const SHUTDOWN_GRACE_SECS: u64 = 5;
 use tokio::sync::Mutex;
 
 use crate::process::{LaunchReport, Role};
@@ -110,7 +116,7 @@ impl SidecarController {
         });
 
         let port = match tokio::time::timeout(
-            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(STARTUP_TIMEOUT_SECS),
             parse_listening_port(stderr),
         )
         .await
@@ -124,7 +130,9 @@ impl SidecarController {
             }
             Err(_) => {
                 let _ = child.kill().await;
-                anyhow::bail!("llama-server did not report a listening port within 120s");
+                anyhow::bail!(
+                    "llama-server did not report a listening port within {STARTUP_TIMEOUT_SECS}s"
+                );
             }
         };
 
@@ -230,7 +238,7 @@ impl SidecarController {
             Self::send_terminate(*pid);
         }
 
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(SHUTDOWN_GRACE_SECS)).await;
         for (_, pid) in &pids {
             Self::send_kill(*pid);
         }
@@ -335,7 +343,7 @@ impl SidecarController {
 
     #[cfg(target_os = "linux")]
     fn send_terminate(pid: u32) {
-        let rc = unsafe { libc::kill(pid as i32, 15) };
+        let rc = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
         if rc != 0 {
             log::warn!("SIGTERM failed for pid {pid}, escalating to SIGKILL");
             Self::send_kill(pid);
@@ -344,7 +352,7 @@ impl SidecarController {
 
     #[cfg(target_os = "linux")]
     fn send_kill(pid: u32) {
-        let _ = unsafe { libc::kill(pid as i32, 9) };
+        let _ = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
     }
 
     #[cfg(target_os = "windows")]

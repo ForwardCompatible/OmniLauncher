@@ -31,7 +31,7 @@ OmniLauncher/
 ├── src-tauri/                          # Rust backend
 │   ├── src/
 │   │   ├── main.rs                     # Entry bin; sets WEBKIT_DISABLE_COMPOSITING_MODE on Linux
-│   │   ├── lib.rs                      # Crate root; setup(), 16 commands, RunEvent::Exit handler
+│   │   ├── lib.rs                      # Crate root; setup(), 25 commands, RunEvent::Exit handler
 │   │   ├── sidecar.rs                  # Encapsulated process controller (start/stop/status/shutdown_all)
 │   │   ├── process.rs                  # VRAM Translation Engine (build_args, compute_default_settings)
 │   │   ├── proxy.rs                    # axum reverse proxy with SSE streaming
@@ -40,15 +40,19 @@ OmniLauncher/
 │   │   ├── registry.rs                 # Model file discovery + GGUF scan pipeline
 │   │   ├── paths.rs                    # app_data_dir resolution + dev-mode symlinks
 │   │   ├── logging.rs                  # tauri-plugin-log config (Stdout + Webview + LogDir)
-│   │   ├── commands/                   # Tauri command bridge (7 files, one per domain)
-│   │   │   ├── mod.rs                  #   ping + module declarations
+│   │   ├── commands/                   # Tauri command bridge (8 files, one per domain)
+│   │   │   ├── mod.rs                  #   module declarations
 │   │   │   ├── app_settings.rs         #   get_app_settings, save_app_settings_cmd
 │   │   │   ├── flags.rs                #   get_flag_dictionary
 │   │   │   ├── hardware.rs             #   get_hardware_profile, rescan_hardware
-│   │   │   ├── models.rs               #   set_model_role, get/save_model_settings
+│   │   │   ├── huggingface.rs          #   HF Hub commands (search, list, download, readme)
+│   │   │   ├── models.rs               #   get/save_model_settings
 │   │   │   ├── process.rs              #   launch_model, stop_model, get_process_status
-│   │   │   ├── proxy.rs                #   get_proxy_status, set_routing
+│   │   │   ├── proxy.rs                #   get_proxy_status
 │   │   │   └── registry.rs             #   get_models, resync_registry
+│   │   ├── hf_auth.rs                  # HuggingFace OAuth device-code + keychain credentials
+│   │   ├── huggingface.rs              # HuggingFace Hub client (search, list, download, readme)
+│   │   ├── download_manager.rs         # In-flight download tracking + cancellation
 │   │   └── db/                         # SQLite layer
 │   │       ├── mod.rs                  #   DbPools facade + DTOs + has_usable_gpu()
 │   │       ├── pool.rs                 #   deadpool-sqlite pool, WAL pragmas
@@ -65,13 +69,14 @@ OmniLauncher/
 │   ├── app.css                         # Global stylesheet; CSS custom properties on :root (dark theme)
 │   ├── pages/
 │   │   ├── Loader.svelte               # Loader page wrapper (renders both model cards)
+│   │   ├── Models.svelte               # HuggingFace browser + local model library page
 │   │   └── Settings.svelte             # Settings page
 │   ├── components/
 │   │   ├── NavRail.svelte              # Left navigation rail (hardcoded buttons)
-│   │   ├── ChatModelCard.svelte        # Chat-role config card
-│   │   └── EmbeddingModelCard.svelte   # Embedding-role config card
+│   │   └── ModelCard.svelte            # Unified chat+embedding card (parameterized by role)
 │   └── lib/
 │       ├── commands.js                 # Centralized invoke() wrappers (13 functions)
+│       ├── format.js                   # Shared formatting helpers (fmtBytes/fmtMiB)
 │       ├── stores.svelte.js            # Module-level $state singletons + refresh functions
 │       └── types.js                    # JSDoc @typedef declarations (12 types) + CACHE_TYPES
 ├── models/                             # User-supplied .gguf files (.gitkeep'd)
@@ -92,7 +97,7 @@ There is **no router and no SvelteKit.** Navigation is a single `$state` string 
 
 1. **`src/lib/types.js`** — extend the `PageId` typedef union:
    ```js
-   /** @typedef {"loader" | "settings" | "browser"} PageId */
+   /** @typedef {"loader" | "settings" | "models"} PageId */
    ```
 2. **`src/AppShell.svelte`** — add an import at the top, then add a branch to the page switch (~line 84):
    ```svelte
@@ -115,7 +120,7 @@ New pages can call any function in `src/lib/commands.js` and read reactive state
    }
    ```
    All commands return `Result<T, String>` (errors flattened to strings). Keep heavy logic out of the command — call into `db/`, `sidecar.rs`, or `process.rs`.
-2. **Register it** in `src-tauri/src/lib.rs` inside the `generate_handler!` macro (currently 16 commands).
+2. **Register it** in `src-tauri/src/lib.rs` inside the `generate_handler!` macro (currently 25 commands).
 3. **Add the wrapper** in `src/lib/commands.js`:
    ```js
    export async function myCommand(arg) {
@@ -270,11 +275,11 @@ See §3.1 for the page-addition pattern. Summary: `page.current` (`$state` strin
 
 ### 7.2 State (`stores.svelte.js`)
 
-Eight module-level `$state` singletons (shared via import):
+Eleven module-level `$state` singletons (shared via import):
 
 | Export | Shape |
 |--------|-------|
-| `page` | `{ current: "loader" \| "settings" }` |
+| `page` | `{ current: "loader" \| "settings" \| "models" }` |
 | `models` | `{ list: ModelDto[] }` |
 | `hardware` | `{ data: HardwareProfile \| null }` |
 | `proxy` | `{ data: ProxyStatus \| null }` |
@@ -282,6 +287,9 @@ Eight module-level `$state` singletons (shared via import):
 | `settings` | `{ data: AppSettings \| null }` |
 | `flags` | `{ map: Map<string, FlagEntry> }` (keyed by `cli_argument`) |
 | `errors` | `{ items: ErrorItem[] }` |
+| `hfAuth` | HF auth/credential state |
+| `hfSearch` | HF Hub search query/results state |
+| `hfDownloads` | In-flight + completed HF download state |
 
 Six `refresh*()` functions fetch via `commands.js` and route failures to the error queue. `initAll()` runs all six in parallel on mount.
 
@@ -291,7 +299,7 @@ Six `refresh*()` functions fetch via `commands.js` and route failures to the err
 
 ### 7.4 Model Cards
 
-`ChatModelCard.svelte` and `EmbeddingModelCard.svelte` are **intentionally separate files** (not one component with role conditionals). Each renders only its role-relevant flags. Shared flags (VRAM, ctx_size, threads, batch, cache types) are written independently in each file. This is a deliberate choice but a maintenance hazard — any change to a shared flag must be made in both files.
+`ModelCard.svelte` is the single, unified card component used for both roles. It is parameterized by a `role` prop (`"chat"` or `"embedding"`) and renders only the flags relevant to that role. The former `ChatModelCard.svelte` and `EmbeddingModelCard.svelte` were consolidated into this one component so shared flags (VRAM, ctx_size, threads, batch, cache types) now live in a single place — no more keeping two copies in sync.
 
 ### 7.5 Styling
 
@@ -324,12 +332,12 @@ These rules are load-bearing governance. Reserve them for code review.
 
 ## 9. Dependency Hygiene
 
-Three declared dependencies are currently unused and can be removed in a dedicated cleanup pass:
+A dedicated cleanup pass removed three previously-unused dependencies. They are **gone** from the manifests and should not be re-added:
 
 | Dependency | Where | Status |
 |-----------|-------|--------|
-| `thiserror = "2.0"` | `src-tauri/Cargo.toml` | Never imported. All error handling uses `anyhow`. |
-| `dirs = "6.0"` | `src-tauri/Cargo.toml` | Never used. `paths.rs` resolves dirs via Tauri's `app.path()` API. |
-| `@tauri-apps/plugin-log` | `package.json` | Never imported. Frontend errors route to the in-UI queue. |
+| `thiserror = "2.0"` | `src-tauri/Cargo.toml` | **Removed.** Was never imported; all error handling uses `anyhow`. |
+| `dirs = "6.0"` | `src-tauri/Cargo.toml` | **Removed.** Was never used; `paths.rs` resolves dirs via Tauri's `app.path()` API. |
+| `@tauri-apps/plugin-log` | `package.json` | **Removed.** Was never imported; frontend errors route to the in-UI queue. |
 
-These are listed here so they're not a surprise to a future reader and can be safely removed without behavior change. The Rust backend's `log` crate (used by `tauri-plugin-log` on the Rust side) is still active and should not be confused with the frontend plugin.
+Note: the Rust backend's `log` crate (used by `tauri-plugin-log` on the Rust side) is still active and should not be confused with the removed frontend plugin.

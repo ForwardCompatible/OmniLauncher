@@ -16,6 +16,16 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use deadpool_sqlite::{Config, Hook, Pool, Runtime};
 
+/// Maximum pooled connections per database. Tauri commands are short-lived;
+/// 8 is generous for a desktop app's concurrency.
+const DB_POOL_MAX_SIZE: usize = 8;
+
+/// SQLite `busy_timeout` in milliseconds. Writers block this long before
+/// returning SQLITE_BUSY. NTFS locking is more aggressive than Linux fcntl
+/// under WAL; 10s is the SQLite team's recommendation for Windows, harmless
+/// on Linux.
+const DB_BUSY_TIMEOUT_MS: i64 = 10000;
+
 /// The two database pools, held in Tauri managed state.
 pub struct DbPools {
     /// `System.db` — app settings, hardware profile, flag dictionary.
@@ -41,7 +51,7 @@ fn open_pool(path: &Path) -> Result<Pool> {
     let pool = cfg
         .builder(Runtime::Tokio1)
         .with_context(|| format!("Failed to build pool for {}", path.display()))?
-        .max_size(8)
+        .max_size(DB_POOL_MAX_SIZE)
         .post_create(Hook::async_fn(|conn, _metrics| {
             Box::pin(async move {
                 // `conn` is a `SyncWrapper<rusqlite::Connection>`; run the
@@ -72,6 +82,6 @@ fn apply_pragmas(conn: &mut rusqlite::Connection) -> Result<(), rusqlite::Error>
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     // 10s — NTFS file locking is more aggressive than Linux fcntl under WAL.
     // This is the SQLite team's recommendation for Windows; harmless on Linux.
-    conn.pragma_update(None, "busy_timeout", 10000)?;
+    conn.pragma_update(None, "busy_timeout", DB_BUSY_TIMEOUT_MS)?;
     Ok(())
 }

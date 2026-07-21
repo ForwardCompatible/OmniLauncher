@@ -7,14 +7,8 @@
 pub mod app_settings;
 pub mod flags;
 pub mod hardware;
+pub mod huggingface;
 pub mod models;
 pub mod process;
 pub mod proxy;
 pub mod registry;
-
-/// Trivial smoke-test command.
-#[tauri::command]
-pub fn ping() -> String {
-    log::info!("ping() called from the frontend");
-    "pong".to_string()
-}

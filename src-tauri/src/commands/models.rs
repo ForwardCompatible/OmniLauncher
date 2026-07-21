@@ -1,34 +1,15 @@
-//! Per-model commands: role tagging + settings load/save.
+//! Per-model commands: settings load/save.
 //!
-//! These are the data-side commands the Loader page (Layer 6) will bind to.
-//! The launch/stop commands live in `commands::process` (added in 5d).
+//! These are the data-side commands the Loader page binds to.
+//! The launch/stop commands live in `commands::process`.
 
 use std::sync::Arc;
 
-use serde::Deserialize;
 use tauri::State;
 
 use crate::db::{registry_ops, DbPools};
 use crate::hardware::HardwareProfile;
 use crate::process::compute_default_settings;
-
-#[derive(Debug, Deserialize)]
-pub struct SetRoleArgs {
-    pub model_id: i64,
-    /// "chat", "embedding", or null to clear.
-    pub role: Option<String>,
-}
-
-/// Tag a model as chat or embedding (or clear the tag with null).
-#[tauri::command]
-pub async fn set_model_role(
-    pools: State<'_, Arc<DbPools>>,
-    args: SetRoleArgs,
-) -> Result<(), String> {
-    registry_ops::set_model_role(&pools.registry, args.model_id, args.role.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
 
 /// Load a model's saved settings, or compute defaults if none saved yet.
 ///

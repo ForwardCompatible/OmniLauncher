@@ -7,6 +7,20 @@
 use crate::db::registry_ops::{ModelSettings, ModelSummary};
 use crate::hardware::HardwareProfile;
 
+/// Default context-size cap for auto-computed settings. Even if the model
+/// supports a longer context, this keeps the default conservative to avoid
+/// excessive RAM/VRAM allocation. Users can override per-model.
+const DEFAULT_CTX_SIZE_CAP: i64 = 4096;
+
+/// VRAM allocation fraction: the default is 80% of total VRAM (8/10). The user
+/// can override this per-model via the VRAM slider.
+const VRAM_ALLOCATION_NUM: i64 = 8;
+const VRAM_ALLOCATION_DENOM: i64 = 10;
+
+/// Minimum `--fit-target` in MiB. Clamped to prevent the fit engine from
+/// receiving an impossibly small target when the user sets near-100% allocation.
+const FIT_TARGET_FLOOR_MIB: i64 = 256;
+
 /// Which proxy route a launched model serves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -40,10 +54,10 @@ pub struct LaunchReport {
 /// Uses ModelSettings::default() (all None = auto/omit) and overrides only
 /// the computed fields that depend on hardware + model metadata.
 pub fn compute_default_settings(model: &ModelSummary, hw: &HardwareProfile) -> ModelSettings {
-    let ctx_size = model.context_length.min(4096);
+    let ctx_size = model.context_length.min(DEFAULT_CTX_SIZE_CAP);
 
     let vram_allocation_mb = if hw.gpu_present {
-        (hw.total_vram_mb * 8 / 10).max(0)
+        (hw.total_vram_mb * VRAM_ALLOCATION_NUM / VRAM_ALLOCATION_DENOM).max(0)
     } else {
         0
     };
@@ -139,7 +153,7 @@ pub fn build_args(
     let gpu_mode = !cpu_mode && hw.gpu_present && allocation > 0;
 
     if gpu_mode {
-        let margin = (hw.total_vram_mb - allocation).max(256);
+        let margin = (hw.total_vram_mb - allocation).max(FIT_TARGET_FLOOR_MIB);
         // Use "auto" (not 999) so the --fit engine can dynamically reduce the
         // layer count to fit within the VRAM budget. A hardcoded 999 causes the
         // fit engine to abort ("n_gpu_layers already set by user") and the

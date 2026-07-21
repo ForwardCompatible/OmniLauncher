@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import { listen } from "@tauri-apps/api/event";
+  import { fmtMiB } from "./lib/format.js";
   import Loader from "./pages/Loader.svelte";
   import Settings from "./pages/Settings.svelte";
   import NavRail from "./components/NavRail.svelte";
@@ -25,11 +26,6 @@
 
   function toggleRail() {
     railCollapsed = !railCollapsed;
-  }
-
-  /** Format a MiB value as a one-decimal GB string, e.g. 6553 → "6.4 GB". */
-  function fmtGB(mb) {
-    return (mb / 1024).toFixed(1) + " GB";
   }
 
   let runningCount = $derived(processes.list.length);
@@ -94,6 +90,10 @@
       <Loader />
       {:else if page.current === "settings"}
       <Settings />
+      {:else if page.current === "models"}
+        {#await import("./pages/Models.svelte") then { default: Models }}
+          <Models />
+        {/await}
     {/if}
   </main>
 
@@ -106,12 +106,12 @@
       </span>
       <span class="stat" title="System memory">
         <span class="stat-label">RAM</span>
-        {fmtGB(hardwareStats.data.ram_used_mb)} / {fmtGB(hardwareStats.data.ram_total_mb)}
+        {fmtMiB(hardwareStats.data.ram_used_mb)} / {fmtMiB(hardwareStats.data.ram_total_mb)}
       </span>
       {#if hardwareStats.data.vram_total_mb !== null}
         <span class="stat" title="GPU video memory">
           <span class="stat-label">VRAM</span>
-          {fmtGB(hardwareStats.data.vram_used_mb)} / {fmtGB(hardwareStats.data.vram_total_mb)}
+          {fmtMiB(hardwareStats.data.vram_used_mb)} / {fmtMiB(hardwareStats.data.vram_total_mb)}
         </span>
       {/if}
     {/if}

@@ -32,18 +32,19 @@ pub async fn get_models(pools: State<'_, Arc<DbPools>>) -> Result<Vec<ModelDto>,
     let summaries = registry_ops::list_models(&pools.registry)
         .await
         .map_err(|e| e.to_string())?;
+    // Batch: one query for all model IDs that have settings (replaces the
+    // former N+1 pattern of one query per model).
+    let with_settings = registry_ops::models_with_settings(&pools.registry)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    let mut out = Vec::with_capacity(summaries.len());
-    for s in summaries {
-        let id = s.id;
-        let has_settings = registry_ops::model_has_settings(&pools.registry, id)
-            .await
-            .map_err(|e| e.to_string())?;
-        out.push(ModelDto {
-            summary: s,
-            has_settings,
-        });
-    }
+    let out = summaries
+        .into_iter()
+        .map(|s| {
+            let has_settings = with_settings.contains(&s.id);
+            ModelDto { summary: s, has_settings }
+        })
+        .collect();
     Ok(out)
 }
 
@@ -64,10 +65,14 @@ pub async fn resync_registry(
             .ok_or_else(|| "models_directory not set in app_settings".to_string())?,
     );
 
-    let (records, scan_report) = registry_scan::scan_with_report(&models_dir)
+    let known_files = registry_ops::list_known_file_sizes(&pools.registry)
+        .await
         .map_err(|e| e.to_string())?;
+    let (records, all_filenames, scan_report) =
+        registry_scan::scan_with_report(&models_dir, &known_files)
+            .map_err(|e| e.to_string())?;
 
-    let reconcile = registry_ops::reconcile_models(&pools.registry, &records)
+    let reconcile = registry_ops::reconcile_models(&pools.registry, &records, &all_filenames)
         .await
         .map_err(|e| e.to_string())?;
 

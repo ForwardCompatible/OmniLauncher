@@ -12,6 +12,9 @@ A Tauri v2 desktop application that provides a clean simple GUI that locally exp
 - **42 Configurable Flags** — Temperature, top-k/p, repeat penalty, mirostat, DRY sampling, RoPE scaling, and more. All default to "auto" — only set what you need.
 - **Helpful Tooltips** — Each setting has a hover-tip to explain what it does, in terms you can understand (NO excessive techno-babble!)
 - **Hardware Auto-Detection** — Scans NVIDIA VRAM, system RAM, and CPU cores on first launch. CPU-only fallback if no GPU is detected.
+- **HuggingFace Model Browser** — Search, browse, and download GGUF models directly from HuggingFace with OAuth authentication.
+- **Live Hardware Monitor** — Real-time CPU, RAM, and VRAM usage in the footer.
+- **Model Card Viewer** — Read the README/model card of any HuggingFace repo before downloading.
 - **Pure JavaScript Frontend** — Svelte 5 with runes. No TypeScript, no bloat.
 
 ## Quick Start
@@ -89,9 +92,9 @@ curl http://127.0.0.1:52715/v1/chat/completions \
 ```
 OmniLauncher/
 ├── src/                    # Svelte 5 frontend (pure JS)
-│   ├── components/         # ChatModelCard, EmbeddingModelCard, NavRail
-│   ├── lib/                # commands.js (API layer), types.js, stores.svelte.js
-│   └── pages/              # Loader, Settings
+│   ├── components/         # ModelCard (unified), NavRail, HfBrowser, LocalLibrary, ...
+│   ├── lib/                # commands.js (API layer), format.js, types.js, stores.svelte.js
+│   └── pages/              # Loader, Models, Settings
 ├── src-tauri/              # Rust backend
 │   ├── src/
 │   │   ├── sidecar.rs      # Encapsulated process controller (start/stop/status)
@@ -99,13 +102,16 @@ OmniLauncher/
 │   │   ├── proxy.rs        # axum reverse proxy with SSE streaming
 │   │   ├── gguf.rs         # Hand-rolled GGUF header parser
 │   │   ├── hardware.rs     # NVML + sysinfo detection
+│   │   ├── hf_auth.rs      # HuggingFace OAuth credential storage (keyring)
+│   │   ├── huggingface.rs  # HuggingFace API client (search, model cards, files)
+│   │   ├── download_manager.rs # Resumable GGUF downloads with progress events
 │   │   ├── db/             # SQLite layer (deadpool-sqlite, WAL mode)
 │   │   └── commands/       # Tauri command bridge
 │   └── resources/          # Bundled llama-server binary (Linux)
 └── models/                 # User-supplied .gguf files
 ```
 
-See [PROJECT_DOSSIER.md](PROJECT_DOSSIER.md) for the complete technical reference.
+See [ROADMAP.md](ROADMAP.md) for the project roadmap.
 
 ## Development
 

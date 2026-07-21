@@ -142,8 +142,68 @@
  */
 
 /**
- * @typedef {"loader" | "settings"} PageId
+ * @typedef {"loader" | "settings" | "models"} PageId
  * @typedef {"chat" | "embedding"} Role
+ */
+
+// ── HuggingFace OAuth ──
+
+/**
+ * @typedef {Object} DeviceAuthInfo
+ * @property {string} device_code
+ * @property {string} user_code
+ * @property {string} verification_uri
+ * @property {number} expires_in
+ */
+
+/**
+ * @typedef {Object} HfAuthStatus
+ * @property {boolean} connected
+ * @property {string | null} username
+ * @property {number | null} expires_at
+ * @property {boolean} keychain_unavailable
+ */
+
+// ── HuggingFace search ──
+
+/**
+ * @typedef {Object} HfModelResult
+ * @property {string} id
+ * @property {string | null} author
+ * @property {number | null} downloads
+ * @property {number | null} likes
+ * @property {string | null} pipeline_tag
+ * @property {string | null} last_modified
+ * @property {number | null} trending_score
+ * @property {"no" | "auto" | "manual" | "unknown"} gated
+ * @property {boolean} has_gguf_files True if siblings contain at least one .gguf file
+ */
+
+/**
+ * @typedef {Object} HfSearchPage
+ * @property {HfModelResult[]} results
+ * @property {string | null} next_cursor
+ */
+
+/**
+ * @typedef {Object} HfFile
+ * @property {string} filename
+ * @property {number | null} size_bytes
+ */
+
+/**
+ * @typedef {Object} HfFilesResponse
+ * @property {HfFile[]} files
+ * @property {string | null} architecture
+ * @property {number | null} context_length
+ * @property {number | null} total_file_size
+ */
+
+/**
+ * @typedef {Object} DownloadProgressEvent
+ * @property {number} id
+ * @property {number} downloaded_bytes
+ * @property {number | null} total_bytes
  */
 
 /**
